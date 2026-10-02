@@ -1,0 +1,11 @@
+node_modules/
+
+# Raw corpus and local source archives are not needed to run the app.
+data/ecdict.csv
+data/sources/
+data/words.before*.json
+
+# Local editor and operating-system files
+.DS_Store
+Thumbs.db
+*.log

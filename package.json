@@ -1,0 +1,8 @@
+{
+  "scripts": {
+    "validate:words": "node scripts/validate-words.cjs"
+  },
+  "dependencies": {
+    "wordpos": "^2.1.0"
+  }
+}

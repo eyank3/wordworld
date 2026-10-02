@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#eff6ff" />
+  <title>不背单词</title>
+  <!-- TailwindCSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // 自定义 Tailwind 主题色
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              green: '#22c55e',
+              red: '#ef4444',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <!-- 应用根容器：手机全宽，平板和桌面最高 680px -->
+  <div id="app" class="app-container"></div>
+  <script>
+    // ES Module 不能可靠地从 file:// 页面加载，给直接双击打开的情况提供明确提示。
+    if (location.protocol === 'file:') {
+      document.getElementById('app').innerHTML = `
+        <main style="max-width:560px;margin:15vh auto;padding:32px 24px;text-align:center;font-family:system-ui,-apple-system,'Microsoft YaHei',sans-serif;color:#0f172a">
+          <h1 style="font-size:24px;margin-bottom:12px">请通过本地服务器打开</h1>
+          <p style="color:#64748b;line-height:1.8">这个页面包含多个 JavaScript 模块，直接双击 HTML 文件时浏览器会阻止加载它们。</p>
+          <p style="color:#64748b;line-height:1.8">请双击项目目录里的「启动学习页面.bat」，再访问弹出的地址。</p>
+        </main>`;
+    }
+  </script>
+  <script>
+    if (location.protocol !== 'file:') {
+      const appScript = document.createElement('script');
+      appScript.type = 'module';
+      // 每次打开都拉取最新代码，避免本地开发时继续使用旧的乱序逻辑。
+      appScript.src = 'js/app.js?v=' + Date.now();
+      document.body.appendChild(appScript);
+    }
+  </script>
+</body>
+</html>
