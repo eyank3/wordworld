@@ -10,7 +10,7 @@ import { speak } from './utils/speech.js';
 import { renderNavbar } from './components/navbar.js';
 import { renderWordCard } from './components/word-card.js';
 import { renderExample } from './components/example.js';
-import { renderExpandTabs } from './components/expand-tabs.js?v=2';
+import { renderExpandTabs } from './components/expand-tabs.js?v=3';
 import { renderActionBar } from './components/action-bar.js';
 import { renderHome } from './components/home.js';
 import * as srs from './srs.js';
@@ -19,6 +19,7 @@ import * as srs from './srs.js';
 let wordList = []; // 运行时加载的真实词库
 let wordMap = new Map(); // id -> word
 let dataSource = '词库';
+let lexicalStatus = 'idle'; // idle | loading | ready | failed
 function readFavorites() {
   try { const value = JSON.parse(localStorage.getItem('bubei_favorites') || '[]'); return Array.isArray(value) ? value : []; } catch { return []; }
 }
@@ -57,28 +58,72 @@ const state = {
 
 // ===== 数据加载 =====
 
+function validateWordPayload(data) {
+  return Boolean(data && Array.isArray(data.words) && data.words.length > 0 && data.words.every(w => w && w.id && w.word));
+}
+
+function validateLexicalPayload(data) {
+  return Boolean(data && Array.isArray(data.words) && data.words.length > 0 && data.words.every(w => w && w.id));
+}
+
+async function fetchWordPayload(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 /**
- * 从 data/words.json 加载真实词库，失败则回退到 Mock 数据
+ * 先加载轻量核心词库，避免移动端等待完整词汇拓展数据。
  */
 async function loadWordList() {
   try {
-    // 数据版本变化时只需递增这里，正常访问仍可享受浏览器缓存。
-    const res = await fetch('data/words.json?v=3');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    if (data.words && data.words.length > 0) {
-      if (!Array.isArray(data.words) || !data.words.every(w => w && w.id && w.word)) throw new Error('词库格式无效');
+    const data = await fetchWordPayload('data/words-core.json?v=1');
+    if (!validateWordPayload(data)) throw new Error('核心词库格式无效或为空');
+    wordList = data.words;
+    dataSource = '核心词库（快速加载）';
+    lexicalStatus = 'loading';
+    console.log(`✓ 已加载核心词库: ${wordList.length} 词`);
+    return;
+  } catch (err) {
+    console.warn(`⚠ 核心词库加载失败，尝试完整词库: ${err.message}`);
+    try {
+      const data = await fetchWordPayload('data/words.json?v=4');
+      if (!validateWordPayload(data)) throw new Error('完整词库格式无效或为空');
       wordList = data.words;
       dataSource = '完整词库';
-      console.log(`✓ 已加载真实词库: ${wordList.length} 词（来源: ${data.meta?.source || 'ECDICT'}）`);
+      lexicalStatus = 'ready';
+      console.log(`✓ 已加载完整词库: ${wordList.length} 词（来源: ${data.meta?.source || 'ECDICT'}）`);
       return;
+    } catch (fallbackError) {
+      console.warn(`⚠ 词库加载失败，使用 Mock 数据: ${fallbackError.message}`);
+      wordList = mockWordList;
+      dataSource = '示例词库（离线）';
+      lexicalStatus = 'failed';
     }
-    throw new Error('词库为空');
-  } catch (err) {
-    console.warn(`⚠ 加载真实词库失败，使用 Mock 数据: ${err.message}`);
-    wordList = mockWordList;
-    dataSource = '示例词库（离线）';
   }
+}
+
+async function loadLexicalData() {
+  if (lexicalStatus !== 'loading') return;
+  try {
+    const data = await fetchWordPayload('data/words-lexical.json?v=1');
+    if (!validateLexicalPayload(data)) throw new Error('拓展词库格式无效或为空');
+    const lexicalMap = new Map(data.words.map(item => [String(item.id), item]));
+    for (const word of wordList) {
+      const lexical = lexicalMap.get(String(word.id));
+      if (lexical) Object.assign(word, lexical);
+    }
+    lexicalStatus = 'ready';
+    dataSource = '完整词库';
+    console.log(`✓ 已加载词汇拓展: ${data.words.length} 条`);
+  } catch (err) {
+    lexicalStatus = 'failed';
+    dataSource = '核心词库（拓展加载失败）';
+    console.warn(`⚠ 词汇拓展加载失败，核心学习仍可使用: ${err.message}`);
+  }
+  buildWordMap();
+  if (state.view === 'home') renderHomeView();
+  else render(false);
 }
 
 function buildWordMap() {
@@ -247,7 +292,7 @@ function renderPracticeCard(word) {
 
 function renderPracticeExpansion(word) {
   if (state.practiceMode === 'recognition' || state.practiceResult) {
-    return renderExpandTabs(word, state.activeTab);
+    return renderExpandTabs(word, state.activeTab, { lexicalStatus });
   }
   return '<section class="practice-locked glass-card" aria-live="polite"><span aria-hidden="true">🔒</span><span>检查答案后查看搭配、派生和词根</span></section>';
 }
@@ -274,7 +319,7 @@ function renderStudy(animate = true) {
 
   const app = document.getElementById('app');
   const studySection = state.practiceMode === 'recognition'
-    ? `${renderWordCard(word)}${exampleSection}${renderExpandTabs(word, state.activeTab)}`
+    ? `${renderWordCard(word)}${exampleSection}${renderExpandTabs(word, state.activeTab, { lexicalStatus })}`
     : renderPracticeCard(word);
   app.innerHTML = `
     ${renderNavbar({ currentIndex: state.pos, total: state.queue.length, isFavorite, canUndo, orderMode: state.orderMode })}
@@ -708,7 +753,7 @@ function renderWordDetail() {
     ${state.detailWord ? '<span class="related-badge">关联词条</span>' : `<button class="nav-icon-btn" data-action="favorite" aria-pressed="${favorite}" aria-label="${favorite ? '取消收藏' : '收藏'}">${favorite ? '★ 已收藏' : '☆ 收藏'}</button>`}</nav>
     <main class="main-content">${renderWordCard(word)}
     ${word.examples?.length ? renderExample(word.examples[0], word.word) : ''}
-    ${renderExpandTabs(word, state.detailTab)}</main>`;
+    ${renderExpandTabs(word, state.detailTab, { lexicalStatus })}</main>`;
 }
 
 function renderSettings() {
@@ -780,4 +825,5 @@ document.getElementById('app').addEventListener('input', e => {
   await loadWordList();
   buildWordMap();
   render(true);
+  loadLexicalData();
 })();
