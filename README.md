@@ -27,7 +27,7 @@ python -m http.server 8000
 
 ## 数据
 
-运行所需的词库位于 `data/words.json`。数据来源和许可说明见 [`data/SOURCES.md`](data/SOURCES.md)。仓库不包含原始语料文件和本地历史词库备份；这些文件不是运行应用所需内容。
+运行所需的词库位于 `data/words-core.json` 和 `data/words-lexical.json`：核心词库先加载，搭配、派生、词形、词根和语义关系随后加载，适合移动网络环境。`data/words.json` 保留为完整词库兼容文件。数据来源和许可说明见 [`data/SOURCES.md`](data/SOURCES.md)。仓库不包含原始语料文件和本地历史词库备份；这些文件不是运行应用所需内容。
 
 ## 开发
 
